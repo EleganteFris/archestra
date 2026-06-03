@@ -311,6 +311,9 @@ COPY archestra-rs/sandbox-rs/package.json archestra-rs/sandbox-rs/
 COPY patches/ patches/
 COPY docker/scripts/docker-banner.sh /app/docker-banner.sh
 COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
+# slim Dagger Engine manifest applied into the embedded KinD cluster in
+# quickstart mode; backs the skill sandbox / code runtime (archestra__run_python).
+COPY docker/k8s/dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
 COPY docker/supervisord/supervisord.conf /etc/supervisord.conf
 COPY docker/supervisord/postgres.conf /etc/supervisord.postgres.conf
 
