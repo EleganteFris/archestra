@@ -528,6 +528,12 @@ export const RouteId = {
   // Audit Log Routes
   GetAuditLogs: "getAuditLogs",
 
+  // Hook File Routes
+  GetHooks: "getHooks",
+  CreateHook: "createHook",
+  UpdateHook: "updateHook",
+  DeleteHook: "deleteHook",
+
   // Skill Share Link Routes
   GetSkillShareLinks: "getSkillShareLinks",
   CreateSkillShareLink: "createSkillShareLink",
