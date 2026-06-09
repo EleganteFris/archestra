@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.2.61](https://github.com/archestra-ai/archestra/compare/platform-v1.2.60...platform-v1.2.61) (2026-06-09)
+
+
+### Features
+
+* **chat:** unified Files panel (artifact, generated files, attachments) ([#5417](https://github.com/archestra-ai/archestra/issues/5417)) ([ca6f659](https://github.com/archestra-ai/archestra/commit/ca6f6594c424738891be41cb68927a06ec0583c4))
+
+
+### Bug Fixes
+
+* improve image pull secret selection ([#5421](https://github.com/archestra-ai/archestra/issues/5421)) ([9b8432a](https://github.com/archestra-ai/archestra/commit/9b8432a43c315209bd350e6cec21ab0839c42500))
+* **llm-proxy,harness:** cross-review cleanup of today's LLM/harness work ([#5420](https://github.com/archestra-ai/archestra/issues/5420)) ([3d42efe](https://github.com/archestra-ai/archestra/commit/3d42efe30cb9d063f08b7ce310f8971d8efd9e80))
+* **llm-proxy:** forward non-local virtual keys from in-app chat to the downstream provider ([#5408](https://github.com/archestra-ai/archestra/issues/5408)) ([a9e27fa](https://github.com/archestra-ai/archestra/commit/a9e27faf32f6072a3bc8ac4bc38e03452d199af4))
+* **llm-proxy:** sanitize non-string enums in Gemini tool schemas ([#5407](https://github.com/archestra-ai/archestra/issues/5407)) ([18510c4](https://github.com/archestra-ai/archestra/commit/18510c4854c1b5e662596f739ac123eeee86b1a7))
+* **proxy:** avoid Anthropic SDK stream helper crash on malformed tool deltas ([#5409](https://github.com/archestra-ai/archestra/issues/5409)) ([7c57e8e](https://github.com/archestra-ai/archestra/commit/7c57e8e00d2ea060adf515841942080fd7a77f7d))
+* regenerate button ([#5410](https://github.com/archestra-ai/archestra/issues/5410)) ([79cba95](https://github.com/archestra-ai/archestra/commit/79cba959e2bd691fd91cb234e19b547450933b88))
+* remove overfit prompt/description patches; make skill-sandbox + tool handling generic ([#5418](https://github.com/archestra-ai/archestra/issues/5418)) ([4230d1e](https://github.com/archestra-ai/archestra/commit/4230d1e724229f3bf630d7a2c16a562c83955a9e))
+* **teams:** scope team pickers and membership checks to the user's teams ([#5336](https://github.com/archestra-ai/archestra/issues/5336)) ([26cbee0](https://github.com/archestra-ai/archestra/commit/26cbee0766dffc7c3020d456c270c1eed72e64e1))
+
+
+### Miscellaneous Chores
+
+* **deps:** bump ai 6.0.90 → 6.0.193, drop vendored Gemini patch ([#5413](https://github.com/archestra-ai/archestra/issues/5413)) ([bea1886](https://github.com/archestra-ai/archestra/commit/bea18860e36a15863d8bbddf9c8736d465b9c84b))
+* **dev-stack:** add status subcommand listing per-worktree frontends ([#5415](https://github.com/archestra-ai/archestra/issues/5415)) ([ba294cc](https://github.com/archestra-ai/archestra/commit/ba294cc0ec9a41be7fcb3eba8918344ddbfc0db7))
+
 ## [1.2.60](https://github.com/archestra-ai/archestra/compare/platform-v1.2.59...platform-v1.2.60) (2026-06-08)
 
 
