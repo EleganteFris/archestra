@@ -461,9 +461,10 @@ export class McpServerRuntimeManager {
         k8sCustomObjectsApi: this.k8sCustomObjectsApi,
         k8sAttach: this.k8sAttach,
         k8sLog: this.k8sLog,
-        namespace: await this.resolveNamespaceForCatalog(
+        namespace: process.env.PERSONAL_MCP_NAMESPACE || await this.resolveNamespaceForCatalog(
           catalogItem,
           options?.networkPolicyResolutionCache,
+          kubeconfigPath: process.env.PERSONAL_MCP_KUBECONFIG || undefined,
         ),
         catalogItem,
         userConfigValues,
