@@ -45,10 +45,6 @@ type DockerRegistrySecretSummary = {
   registryServers: string[];
 };
 
-/**
- * McpServerRuntimeManager manages MCP servers running in Kubernetes.
- * @public — exported for testability
- */
 export class McpServerRuntimeManager {
   private k8sApi?: k8s.CoreV1Api;
   private k8sAppsApi?: k8s.AppsV1Api;
@@ -62,7 +58,6 @@ export class McpServerRuntimeManager {
   private mcpServerIdToDeploymentMap: Map<string, K8sDeployment> = new Map();
   private status: K8sRuntimeStatus = "not_initialized";
 
-  // Callbacks for initialization events
   onRuntimeStartupSuccess: () => void = () => {};
   onRuntimeStartupError: (error: Error) => void = () => {};
 
@@ -91,15 +86,10 @@ export class McpServerRuntimeManager {
       this.k8sAttach = undefined;
       this.k8sLog = undefined;
       this.namespace = "";
-      return; // graceful fallback: constructor completes with runtime disabled
+      return;
     }
   }
 
-  /**
-   * Check if the orchestrator K8s runtime is enabled
-   * Returns true if the K8s config loaded successfully (constructor didn't fail)
-   * and the runtime hasn't been stopped
-   */
   get isEnabled(): boolean {
     return this.status !== "error" && this.status !== "stopped";
   }
@@ -121,9 +111,6 @@ export class McpServerRuntimeManager {
     }
   }
 
-  /**
-   * Initialize the runtime and start all installed MCP servers
-   */
   async start(): Promise<void> {
     if (
       !this.k8sApi ||
@@ -138,20 +125,15 @@ export class McpServerRuntimeManager {
       this.status = "initializing";
       logger.info("Initializing Kubernetes MCP Server Runtime...");
 
-      // Verify K8s connectivity
       await this.verifyK8sConnection();
 
-      // Fetch the platform pod's nodeSelector and tolerations to inherit for MCP server deployments
-      // This allows MCP servers to be scheduled on the same node pool as the platform
       await fetchPlatformPodNodeSelector(this.k8sApi, this.namespace);
       await fetchPlatformPodTolerations(this.k8sApi, this.namespace);
 
       this.status = "running";
 
-      // Get all installed local MCP servers from database
       const installedServers = await McpServerModel.findAll();
 
-      // Filter for local servers only (remote servers don't need deployments)
       const localServers: McpServer[] = [];
       const localCatalogItems: CatalogItem[] = [];
       for (const server of installedServers) {
@@ -174,7 +156,6 @@ export class McpServerRuntimeManager {
       const networkPolicyResolutionCache =
         await this.buildNetworkPolicyResolutionCache(localCatalogItems);
 
-      // Start all local servers in parallel
       const startPromises = localServers.map(async (mcpServer) => {
         await this.startServer(mcpServer, undefined, undefined, {
           networkPolicyCapabilities,
@@ -184,7 +165,6 @@ export class McpServerRuntimeManager {
 
       const results = await Promise.allSettled(startPromises);
 
-      // Count successes and failures
       const failures = results.filter((result) => result.status === "rejected");
       const successes = results.filter(
         (result) => result.status === "fulfilled",
@@ -206,138 +186,20 @@ export class McpServerRuntimeManager {
       logger.info("MCP Server Runtime initialization complete");
       this.onRuntimeStartupSuccess();
 
-      // Fire-and-forget: backfill team-id labels on existing regcred secrets
       this.backfillRegcredTeamLabels(installedServers).catch((err) => {
         logger.warn(
           { err },
           "Failed to backfill team-id labels on regcred secrets",
         );
       });
-
-      this.cleanupOrphanedDeployments(installedServers).catch((err) => {
-        logger.warn({ err }, "Failed to cleanup orphaned MCP deployments");
-      });
-    } catch (error: unknown) {
-      const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      logger.error(`Failed to initialize MCP Server Runtime: ${errorMsg}`);
+    } catch (error) {
       this.status = "error";
-      this.onRuntimeStartupError(new Error(errorMsg));
-      throw error;
+      logger.error({ err: error }, "Failed to start Kubernetes MCP Server Runtime");
+      this.onRuntimeStartupError(error instanceof Error ? error : new Error(String(error)));
     }
   }
 
-  private async resolveNamespaceForCatalog(
-    catalogItem:
-      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
-      | null
-      | undefined,
-    cache?: NetworkPolicyResolutionCache,
-  ): Promise<string> {
-    if (!catalogItem?.environmentId) return this.namespace;
-    const env =
-      cache?.environmentsById.get(catalogItem.environmentId) ??
-      (await EnvironmentModel.findById(catalogItem.environmentId));
-    return env?.namespace ?? this.namespace;
-  }
-
-  private async resolveNetworkPolicyForDeployment(params: {
-    mcpServer: McpServer;
-    catalogItem:
-      | Awaited<ReturnType<typeof InternalMcpCatalogModel.findById>>
-      | null
-      | undefined;
-    cache?: NetworkPolicyResolutionCache;
-  }): Promise<EffectiveNetworkPolicy> {
-    const environment =
-      params.catalogItem?.environmentId && params.cache
-        ? params.cache.environmentsById.get(params.catalogItem.environmentId)
-        : params.catalogItem?.environmentId
-          ? await EnvironmentModel.findById(params.catalogItem.environmentId)
-          : null;
-    const organizationId =
-      params.catalogItem?.organizationId ?? environment?.organizationId ?? null;
-
-    if (!organizationId) {
-      return { source: "built_in", policy: null };
-    }
-
-    const organization = params.cache
-      ? params.cache.organizationsById.get(organizationId)
-      : await OrganizationModel.getById(organizationId);
-
-    return resolveEffectiveNetworkPolicy({
-      organizationId,
-      environmentId: params.catalogItem?.environmentId,
-      environmentNetworkPolicy: environment?.networkPolicy,
-      defaultNetworkPolicy: organization?.defaultNetworkPolicy,
-    });
-  }
-
-  private async buildNetworkPolicyResolutionCache(
-    catalogItems: CatalogItem[],
-  ): Promise<NetworkPolicyResolutionCache> {
-    const environmentIds = uniqueStrings(
-      catalogItems
-        .map((catalogItem) => catalogItem?.environmentId)
-        .filter((id): id is string => Boolean(id)),
-    );
-    const environments = await Promise.all(
-      environmentIds.map((id) => EnvironmentModel.findById(id)),
-    );
-    const environmentsById = new Map<string, EnvironmentRow>();
-    for (const environment of environments) {
-      if (environment) environmentsById.set(environment.id, environment);
-    }
-
-    const organizationIds = uniqueStrings([
-      ...catalogItems
-        .map((catalogItem) => catalogItem?.organizationId)
-        .filter((id): id is string => Boolean(id)),
-      ...environments
-        .map((environment) => environment?.organizationId)
-        .filter((id): id is string => Boolean(id)),
-    ]);
-    const organizations = await Promise.all(
-      organizationIds.map((id) => OrganizationModel.getById(id)),
-    );
-    const organizationsById = new Map<string, OrganizationRow>();
-    for (const organization of organizations) {
-      if (!organization) continue;
-      organizationsById.set(organization.id, organization);
-    }
-
-    return {
-      environmentsById,
-      organizationsById,
-    };
-  }
-
-  /**
-   * Verify that we can connect to Kubernetes
-   */
-  private async verifyK8sConnection(): Promise<void> {
-    if (!this.k8sApi) {
-      throw new Error("Kubernetes API client not initialized");
-    }
-
-    try {
-      logger.info(`Verifying K8s connection to namespace: ${this.namespace}`);
-
-      // Try to list pods in the namespace to verify K8s API connectivity
-      await this.k8sApi.listNamespacedPod({ namespace: this.namespace });
-
-      logger.info("K8s connection verified successfully");
-    } catch (error: unknown) {
-      const errorMsg = error instanceof Error ? error.message : "Unknown error";
-      logger.error(`Failed to connect to Kubernetes: ${errorMsg}`);
-      throw new Error(errorMsg);
-    }
-  }
-
-  /**
-   * Start a single MCP server deployment
-   */
-  async startServer(
+    async startServer(
     mcpServer: McpServer,
     userConfigValues?: Record<string, string>,
     environmentValues?: Record<string, string>,
@@ -346,35 +208,32 @@ export class McpServerRuntimeManager {
       networkPolicyResolutionCache?: NetworkPolicyResolutionCache;
     },
   ): Promise<void> {
-    if (
-      !this.k8sApi ||
-      !this.k8sAppsApi ||
-      !this.k8sNetworkingApi ||
-      !this.k8sCustomObjectsApi
-    ) {
-      throw new Error("Kubernetes API client not initialized");
+    const originalNamespace = this.namespace;
+    const originalCoreApi = this.k8sApi;
+    const originalAppsApi = this.k8sAppsApi;
+    const originalNetworkingApi = this.k8sNetworkingApi;
+    const originalCustomObjectsApi = this.k8sCustomObjectsApi;
+
+    this.namespace = (mcpServer as any).namespace || originalNamespace;
+
+    if ((mcpServer as any).kubeconfigText) {
+      const k8s = require("@kubernetes/client-node");
+      const { createK8sClients } = require("@/k8s/shared");
+      
+      const kc = new k8s.KubeConfig();
+      kc.loadFromString((mcpServer as any).kubeconfigText);
+      
+      const clients = createK8sClients(kc, this.namespace);
+      this.k8sApi = clients.coreApi;
+      this.k8sAppsApi = clients.appsApi;
+      this.k8sNetworkingApi = clients.networkingApi;
+      this.k8sCustomObjectsApi = clients.customObjectsApi;
     }
 
-    const { id, name } = mcpServer;
-    logger.info(`Starting MCP server deployment: id="${id}", name="${name}"`);
-
-    try {
-      // Fetch catalog item (needed for conditional env var logic).
-      let catalogItem = null;
-      if (mcpServer.catalogId) {
-        catalogItem = await InternalMcpCatalogModel.findById(
-          mcpServer.catalogId,
-        );
-      }
-
-      if (!this.k8sAttach || !this.k8sLog || !this.k8sExec) {
-        throw new Error("Kubernetes clients not initialized");
-      }
-
-      // If environmentValues not provided but server has a secretId,
-      // fetch the secret values to use as environmentValues.
-      // This is critical for restarts where env values need to be preserved
-      // to ensure the pod spec includes the secretKeyRef for prompted env vars.
+    if (!this.k8sApi || !this.k8sAppsApi || !this.k8sNetworkingApi || !this.k8sCustomObjectsApi) {
+      throw new Error("Kubernetes client not initialized");
+    }
+      
       let effectiveEnvironmentValues = environmentValues;
       let secretData: Record<string, string> | undefined;
 
@@ -525,18 +384,23 @@ export class McpServerRuntimeManager {
 
       await k8sDeployment.startOrCreateDeployment(resolvedImagePullSecretNames);
       logger.info(`Successfully started MCP server deployment ${id} (${name})`);
-    } catch (error) {
+        } catch (error) {
+      this.namespace = originalNamespace;
+      this.k8sApi = originalCoreApi;
+      this.k8sAppsApi = originalAppsApi;
+      this.k8sNetworkingApi = originalNetworkingApi;
+      this.k8sCustomObjectsApi = originalCustomObjectsApi;
+
       logger.error(
         { err: error },
         `Failed to start MCP server deployment ${id} (${name}):`,
       );
-      // Keep the deployment in the map even if it failed to start
-      // This ensures it appears in status updates with error state
       logger.warn(
         `MCP server deployment ${id} failed to start but remains registered for error display`,
       );
       throw error;
     }
+
   }
 
   /**
